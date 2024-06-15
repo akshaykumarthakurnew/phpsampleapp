@@ -25,11 +25,9 @@ jobs:
       - name: Generate diagram
         run: |
              python diagram.py
-             ls -lrt
-             pwd
 
       - name: Upload diagram
         uses: actions/upload-artifact@v2
         with:
           name: azure-diagram
-          path: Azure\ Infrastructure.png
+          path: /home/runner/work/phpsampleapp/phpsampleapp/azure_infrastructure.png

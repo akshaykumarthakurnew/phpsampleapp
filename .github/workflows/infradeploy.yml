@@ -1,0 +1,80 @@
+name: Azure Infrastructure Setup
+
+on:
+  workflow_dispatch:
+jobs:
+  setup-azure-resources:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Log in to Azure
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Setup Azure Resources
+      run: |
+        # Variables
+        RESOURCE_GROUP="akkiphprg"
+        LOCATION="uksouth"
+        APP_SERVICE_PLAN="akkiappplan"
+        APP_SERVICE="akkiphpdemo06"
+        VNET_NAME="myVNet"
+        SUBNET_NAME="mySubnet"
+        PRIVATE_ENDPOINT_NAME_DB="myPrivateEndpointDB"
+        PRIVATE_ENDPOINT_NAME_REDIS="myPrivateEndpointRedis"
+        NIC_NAME_DB="myNicDB"
+        NIC_NAME_REDIS="myNicRedis"
+        MYSQL_SERVER="myMysqlServer"
+        MYSQL_DB="myDatabase"
+        MYSQL_USER="demoadmin"
+        MYSQL_PASSWORD="8bd9-617"
+        REDIS_NAME="myRedisCache"
+        PRIVATE_DNS_ZONE_DB="privatedns.database.windows.net"
+        PRIVATE_DNS_ZONE_REDIS="privatelink.redis.cache.windows.net"
+
+        # Create Resource Group
+        az group create --name $RESOURCE_GROUP --location $LOCATION
+
+        # Create App Service Plan
+        az appservice plan create --name $APP_SERVICE_PLAN --resource-group $RESOURCE_GROUP --sku B1 --is-linux
+
+        # Create App Service
+        az webapp create --name $APP_SERVICE --resource-group $RESOURCE_GROUP --plan $APP_SERVICE_PLAN --runtime "PYTHON|3.8"
+
+        # Create Virtual Network and Subnet
+        az network vnet create --name $VNET_NAME --resource-group $RESOURCE_GROUP --subnet-name $SUBNET_NAME
+
+        # Create Azure Database for MySQL flexible server
+        az mysql flexible-server create --resource-group $RESOURCE_GROUP --name $MYSQL_SERVER --admin-user $MYSQL_USER --admin-password $MYSQL_PASSWORD --vnet $VNET_NAME --subnet $SUBNET_NAME --public-access none
+
+        # Create a database on the MySQL server
+        az mysql flexible-server db create --resource-group $RESOURCE_GROUP --server-name $MYSQL_SERVER --database-name $MYSQL_DB
+
+        # Create Azure Cache for Redis
+        az redis create --name $REDIS_NAME --resource-group $RESOURCE_GROUP --sku Basic --vm-size C0
+
+        # Create Private Endpoints for MySQL and Redis
+        az network private-endpoint create --name $PRIVATE_ENDPOINT_NAME_DB --resource-group $RESOURCE_GROUP --vnet-name $VNET_NAME --subnet $SUBNET_NAME --private-connection-resource-id $(az mysql flexible-server show --name $MYSQL_SERVER --resource-group $RESOURCE_GROUP --query 'id' -o tsv) --group-id mysql
+        az network private-endpoint create --name $PRIVATE_ENDPOINT_NAME_REDIS --resource-group $RESOURCE_GROUP --vnet-name $VNET_NAME --subnet $SUBNET_NAME --private-connection-resource-id $(az redis show --name $REDIS_NAME --resource-group $RESOURCE_GROUP --query 'id' -o tsv) --group-id redisCache
+
+        # Create Network Interfaces
+        az network nic create --resource-group $RESOURCE_GROUP --name $NIC_NAME_DB --vnet-name $VNET_NAME --subnet $SUBNET_NAME --private-ip-address $(az network private-endpoint show --name $PRIVATE_ENDPOINT_NAME_DB --resource-group $RESOURCE_GROUP --query 'customDnsConfigurations[0].ipAddresses[0]' -o tsv)
+        az network nic create --resource-group $RESOURCE_GROUP --name $NIC_NAME_REDIS --vnet-name $VNET_NAME --subnet $SUBNET_NAME --private-ip-address $(az network private-endpoint show --name $PRIVATE_ENDPOINT_NAME_REDIS --resource-group $RESOURCE_GROUP --query 'customDnsConfigurations[0].ipAddresses[0]' -o tsv)
+
+        # Create Private DNS Zones and Links
+        az network private-dns zone create --resource-group $RESOURCE_GROUP --name $PRIVATE_DNS_ZONE_DB
+        az network private-dns zone create --resource-group $RESOURCE_GROUP --name $PRIVATE_DNS_ZONE_REDIS
+        az network private-dns link vnet create --resource-group $RESOURCE_GROUP --zone-name $PRIVATE_DNS_ZONE_DB --name MyDnsLinkDB --virtual-network $VNET_NAME --registration-enabled false
+        az network private-dns link vnet create --resource-group $RESOURCE_GROUP --zone-name $PRIVATE_DNS_ZONE_REDIS --name MyDnsLinkRedis --virtual-network $VNET_NAME --registration-enabled false
+
+        # Configure App Settings for MySQL and Redis
+        az webapp config appsettings set --resource-group $RESOURCE_GROUP --name $APP_SERVICE --settings \
+          MYSQL_CONNECTION_STRING="Server=$MYSQL_SERVER;Database=$MYSQL_DB;User=$MYSQL_USER;Password=$MYSQL_PASSWORD;SslMode=Required;" \
+          REDIS_CONNECTION_STRING="$(az redis show --name $REDIS_NAME --resource-group $RESOURCE_GROUP --query 'hostName' -o tsv):$(az redis list-keys --name $REDIS_NAME --resource-group $RESOURCE_GROUP --query 'primaryKey' -o tsv)" \
+          CACHE_DRIVER="redis" \
+          MYSQL_ATTR_SSL_CA="path/to/ca-cert.pem" \
+          LOG_CHANNEL="stderr"

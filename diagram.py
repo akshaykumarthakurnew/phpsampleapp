@@ -2,7 +2,7 @@
 
 from diagrams import Diagram, Cluster
 from diagrams.azure.compute import VM
-from diagrams.azure.network import VirtualNetworks, Subnets, NIC
+from diagrams.azure.network import VirtualNetworks, Subnets
 from diagrams.azure.database import SQLDatabases
 from diagrams.azure.identity import ActiveDirectory
 from diagrams.azure.storage import StorageAccounts

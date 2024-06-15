@@ -17,7 +17,7 @@ with Diagram("Azure Infrastructure", show=False):
 
             subnet - [vm1, new_vm]
         
-        sql_db = SQLDatabase("example-db")
+        sql_db = SQLDatabases("example-db")
         ad = ActiveDirectory("example-ad")
 
         storage = StorageAccounts("examplestorageacct")

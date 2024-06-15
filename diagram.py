@@ -10,7 +10,7 @@ from diagrams.azure.storage import StorageAccounts
 with Diagram("Azure Infrastructure", show=False):
     with Cluster("Resource Group: example-resources"):
         with Cluster("VirtualNetworks: example-network"):
-            subnet = Subnet("example-subnet")
+            subnet = Subnets("example-subnet")
 
             vm1 = VM("example-vm")
             new_vm = VM("new-vm")

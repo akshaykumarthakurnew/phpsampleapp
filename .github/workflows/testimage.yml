@@ -23,7 +23,10 @@ jobs:
           sudo apt-get install -y graphviz
 
       - name: Generate diagram
-        run: python diagram.py
+        run: |
+             python diagram.py
+             ls -lrt
+             pwd
 
       - name: Upload diagram
         uses: actions/upload-artifact@v2
